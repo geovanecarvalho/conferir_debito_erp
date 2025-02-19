@@ -63,7 +63,7 @@ Este projeto é uma ferramenta automatizada para consultar dados de clientes em 
 
 ## Estrutura do Projeto
 Certifique-se de que a estrutura do seu projeto esteja organizada da seguinte forma:
-
+```
 Conferir-Debito/
 ├── .env
 ├── .gitignore
@@ -72,3 +72,4 @@ Conferir-Debito/
 ├── update-endereco.csv
 ├── test_conferir_debito.py
 └── README.md
+```
