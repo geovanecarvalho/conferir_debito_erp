@@ -3,6 +3,16 @@ from unidecode import unidecode
 import os, csv, requests
 from datetime import datetime
 from time import sleep
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+
+# Obter as variáveis de ambiente
+ERP_USERNAME = os.getenv('ERP_USERNAME')
+ERP_PASSWORD = os.getenv('ERP_PASSWORD')
+CONTA_AZUL_USERNAME = os.getenv('CONTA_AZUL_USERNAME')
+CONTA_AZUL_PASSWORD = os.getenv('CONTA_AZUL_PASSWORD')
 
 STATUS_ERP = ""
 STATUS_AZUL = ""
@@ -12,25 +22,47 @@ LOGIN_AZUL = 0
 
 todos_cpf = []
 
+# Função para carregar os CPFs do arquivo cpf.txt
 def carregar_cpfs():
     with open("cpf.txt", "r") as file:
         arquivo = file.readlines()
         return [i.strip() for i in arquivo]
 
+# Função para fazer login no ERP
 def login_erp(page):
     global LOGIN_ERP
     if LOGIN_ERP < 1:
         LOGIN_ERP += 1
         sleep(2)
         print("Preenchendo login ERP")
-        page.fill('xpath=/html/body/app-root/div/div[2]/ng-component/div/div/form/span[1]/input', "geovane.oliveira")
+        page.fill('xpath=/html/body/app-root/div/div[2]/ng-component/div/div/form/span[1]/input', ERP_USERNAME)
         sleep(2)
-        page.fill('xpath=/html/body/app-root/div/div[2]/ng-component/div/div/form/span[2]/input', "gti@vane")
+        page.fill('xpath=/html/body/app-root/div/div[2]/ng-component/div/div/form/span[2]/input', ERP_PASSWORD)
         sleep(2)
         page.click('xpath=/html/body/app-root/div/div[2]/ng-component/div/div/form/button')
         sleep(3)
         print("Login ERP realizado")
 
+# Função para fazer login no Conta Azul
+def login_conta_azul(page):
+    global LOGIN_AZUL
+    if LOGIN_AZUL < 1:
+        LOGIN_AZUL += 1
+        print("Realizando login no Conta Azul")
+        page.goto("https://login.contaazul.com/")
+        sleep(5)
+        input_login = page.query_selector_all('//input')
+        if len(input_login) >= 2:
+            input_login[0].fill(CONTA_AZUL_USERNAME)
+            input_login[1].fill(CONTA_AZUL_PASSWORD)
+            sleep(1)
+            page.click('xpath=/html/body/div[4]/div/div[1]/div/div/div[2]/div/div/div[3]/div/div/form/div/div/div[4]/div/div/span/button')
+            sleep(30)
+            print("Login Conta Azul realizado")
+        else:
+            print("Erro ao encontrar campos de login no Conta Azul")
+
+# Função para consultar dados no ERP
 def consultar_erp(page, cpf):
     global STATUS_ERP
     print(f"Consultando ERP para CPF: {cpf}")
@@ -46,6 +78,7 @@ def consultar_erp(page, cpf):
 
     return dados_erp
 
+# Função para extrair dados do ERP
 def extrair_dados_erp(page, cpf):
     bairros = ["JARDIM ABC", "MESQUITA", "JARDIM EDITE", "REMANSO", "JARDIM SATELITE", "SETOR MESQUITA", "PQ DAS AMERICAS", "PARQUE DAS AMERICAS", "MAURI DE CASTRO", "DOM BOSCO"]
     sleep(2)
@@ -107,6 +140,7 @@ def extrair_dados_erp(page, cpf):
         "ENTREGA": ENTREGA
     }
 
+# Função para verificar o status do cliente no ERP
 def verificar_status_erp(page, cpf):
     global STATUS_ERP
     print(f"Verificando status ERP para CPF: {cpf}")
@@ -130,9 +164,10 @@ def verificar_status_erp(page, cpf):
         print("Verificando elemento td")
         if i.text_content() == "MAN":
             n += 3
-            i = a[n]
-            data = i.text_content()
-            lista_de_datas.append(data)
+            if n < len(a):  # Adicionar verificação de limite
+                i = a[n]
+                data = i.text_content()
+                lista_de_datas.append(data)
 
     print("Lista de datas coletadas:", lista_de_datas)
 
@@ -148,24 +183,7 @@ def verificar_status_erp(page, cpf):
 
     print("STATUS ERP: ", STATUS_ERP)
 
-def login_conta_azul(page):
-    global LOGIN_AZUL
-    if LOGIN_AZUL < 1:
-        LOGIN_AZUL += 1
-        print("Realizando login no Conta Azul")
-        page.goto("https://login.contaazul.com/")
-        sleep(5)
-        input_login = page.query_selector_all('//input')
-        if len(input_login) >= 2:
-            input_login[0].fill("geovane.oliveira@gmail.com")
-            input_login[1].fill("456123")
-            sleep(1)
-            page.click('xpath=/html/body/div[4]/div/div[1]/div/div/div[2]/div/div/div[3]/div/div/form/div/div/div[4]/div/div/span/button')
-            sleep(30)
-            print("Login Conta Azul realizado")
-        else:
-            print("Erro ao encontrar campos de login no Conta Azul")
-
+# Função para consultar dados no Conta Azul
 def consultar_conta_azul(page, cpf):
     global STATUS_AZUL
     print(f"Consultando Conta Azul para CPF: {cpf}")
@@ -198,19 +216,36 @@ def consultar_conta_azul(page, cpf):
 
     print("STATUS AZUL: ", STATUS_AZUL)
 
+# Função para salvar os resultados no arquivo CSV
 def salvar_resultado(nome, cpf, status, entrega, cidade, bairro, endereco):
     with open('update-endereco.csv', 'a', newline='', encoding='utf-8') as file:
         arquivo = csv.writer(file, delimiter=';')
         arquivo.writerow([nome, cpf, status, entrega, cidade, bairro, endereco])
     print(f"Resultado salvo para CPF: {cpf}")
 
+# Função principal que coordena o fluxo do programa
 def main():
     global STATUS
     todos_cpf = carregar_cpfs()
     print(f"Total de CPFs carregados: {len(todos_cpf)}")
 
     with sync_playwright() as p:
+        # Primeiro navegador não headless para login
         browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
+
+        # Fazer login no ERP
+        page.goto("https://jardim-paraiso.devhut.app/login")
+        login_erp(page)
+
+        # Fazer login no Conta Azul
+        login_conta_azul(page)
+
+        # Fechar o navegador não headless
+        browser.close()
+
+        # Segundo navegador headless para operações subsequentes
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
         for cpf in todos_cpf:
@@ -218,7 +253,6 @@ def main():
                 print(f"Iniciando processamento para CPF: {cpf}")
                 dados_erp = consultar_erp(page, cpf)
                 if dados_erp:
-                    login_conta_azul(page)
                     consultar_conta_azul(page, cpf)
                     STATUS = STATUS_ERP + "-" + STATUS_AZUL
                     salvar_resultado(dados_erp["NOME"], cpf, STATUS, dados_erp["ENTREGA"], dados_erp["CIDADE"], dados_erp["BAIRRO"], dados_erp["ENDERECO"])

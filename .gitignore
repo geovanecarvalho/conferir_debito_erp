@@ -1,2 +1,5 @@
 cpf.txt
 update-endereco.csv
+.env
+*.pytest_cache/
+*__pycache__/
